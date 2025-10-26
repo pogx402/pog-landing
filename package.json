@@ -1,0 +1,22 @@
+{
+  "name": "pog-landing",
+  "version": "1.0.0",
+  "description": "POG Token x402 Landing Page - Meme Edition",
+  "main": "index.html",
+  "type": "module",
+  "scripts": {
+    "dev": "python3 -m http.server 8000",
+    "build": "echo 'Static site - no build needed'",
+    "start": "npm run dev"
+  },
+  "keywords": [
+    "pog",
+    "x402",
+    "blockchain",
+    "meme",
+    "token"
+  ],
+  "author": "POG Team",
+  "license": "MIT"
+}
+

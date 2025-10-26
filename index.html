@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POG - The Ultimate Meme Token</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='75' font-size='75' fill='%23FF6B00'>🐸</text></svg>">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <span class="logo-emoji">🐸</span>
+                <span class="logo-text">POG</span>
+            </div>
+            <nav class="nav">
+                <a href="#" class="nav-link">Twitter</a>
+                <a href="#" class="nav-link">Telegram</a>
+                <button class="btn-connect" id="connectWallet">Connect Wallet</button>
+            </nav>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main">
+            <div class="content-left">
+                <h1 class="title">$POG</h1>
+                <p class="subtitle">The Ultimate Meme Token 🚀</p>
+                
+                <div class="token-info">
+                    <div class="info-item">
+                        <span class="label">Total Supply</span>
+                        <span class="value">1B</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="label">Contract Address</span>
+                        <span class="value contract-address">0xd026...d844</span>
+                        <button class="btn-copy" onclick="copyAddress()">📋</button>
+                    </div>
+                </div>
+
+                <div class="exchange-rate">
+                    <span class="rate-label">1 USDC = 10,000 $POG</span>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <span class="progress-text" id="progressText">100% / 100%</span>
+                </div>
+
+                <div class="protocol-section">
+                    <div class="tier-box">
+                        <span class="tier-icon">⭐</span>
+                        <span class="tier-text">Tier 1 Meme</span>
+                    </div>
+                    <button class="btn-protocol" id="protocolBtn">🎉 Mint POG Now!</button>
+                </div>
+
+                <div class="stats-section">
+                    <div class="stat-item">
+                        <span class="stat-label">Mints</span>
+                        <span class="stat-value" id="mintCount">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Supply Left</span>
+                        <span class="stat-value" id="supplyLeft">1B</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="content-right">
+                <div class="illustration">
+                    <div class="meme-container">
+                        <div class="meme-emoji">🐸</div>
+                        <div class="meme-text">POG!</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- API Response Display -->
+        <div class="api-response" id="apiResponse" style="display: none;">
+            <div class="response-header">📊 API Response:</div>
+            <pre class="response-content" id="responseContent"></pre>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-text">Powered by x402 Protocol • Based on Base Mainnet 🔗</div>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
+
