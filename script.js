@@ -322,36 +322,87 @@ async function handleProtocolClick() {
                 btn.style.background = 'linear-gradient(135deg, #FF6B00, #FFD700)';
                 btn.style.color = '#1a1a2e';
 
-                // Create message to sign
-                const messageData = {
-                    action: 'mint',
-                    amount: CONFIG.USDC_AMOUNT,
-                    recipient: CONFIG.PAYMENT_ADDRESS,
-                    timestamp: Math.floor(Date.now() / 1000)
-                };
-                
-                try {
-                    // Sign the message
-                    const signature = await walletState.provider.request({
-                        method: 'personal_sign',
-                        params: [ JSON.stringify(messageData), walletState.account ]
-                    });
+	                // Step 2: Prepare EIP-712 Typed Data for TransferWithAuthorization
+	                console.log('Step 2: Preparing EIP-712 Typed Data...');
+	                btn.textContent = '✍️ Preparing Tx...';
+	
+	                // Nonce is required for TransferWithAuthorization. We'll use a random one for simplicity, 
+	                // but in a real app, this should be fetched from the USDC contract or managed carefully.
+	                // This creates a 32-byte hex string (64 characters)
+	                const nonce = '0x' + Array.from({length: 32}, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0')).join('');
+	                const validAfter = 0; // Valid immediately
+	                const validBefore = Math.floor(Date.now() / 1000) + (60 * 5); // Valid for 5 minutes
+	
+	                const domain = {
+	                    name: 'USD Coin',
+	                    version: '2',
+	                    chainId: 8453, // Base Mainnet
+	                    verifyingContract: CONFIG.USDC_ADDRESS, // 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+	                };
+	
+	                const types = {
+	                    EIP712Domain: [
+	                        { name: 'name', type: 'string' },
+	                        { name: 'version', type: 'string' },
+	                        { name: 'chainId', type: 'uint256' },
+	                        { name: 'verifyingContract', type: 'address' },
+	                    ],
+	                    TransferWithAuthorization: [
+	                        { name: 'from', type: 'address' },
+	                        { name: 'to', type: 'address' },
+	                        { name: 'value', type: 'uint256' },
+	                        { name: 'validAfter', type: 'uint256' },
+	                        { name: 'validBefore', type: 'uint256' },
+	                        { name: 'nonce', type: 'bytes32' },
+	                    ],
+	                };
+	
+	                const value = {
+	                    from: walletState.account,
+	                    to: CONFIG.PAYMENT_ADDRESS, // 0x7AE34aD98ABB28797e044f7Fad37364031F19152
+	                    value: CONFIG.USDC_AMOUNT, // 1000000 (1 USDC)
+	                    validAfter: validAfter,
+	                    validBefore: validBefore,
+	                    nonce: nonce,
+	                };
+	
+	                const typedData = {
+	                    domain: domain,
+	                    types: types,
+	                    primaryType: 'TransferWithAuthorization',
+	                    message: value,
+	                };
+	
+	                // We need to send the full typedData structure to the backend for verification
+	                const messageData = typedData; // Overwrite messageData with the EIP-712 structure
+	                
+	                try {
+	                    // Sign the EIP-712 Typed Data
+	                    console.log('Step 3: Signing EIP-712 Typed Data...');
+	                    btn.textContent = '✍️ Signing EIP-712...';
+	
+	                    // eth_signTypedData_v4 expects [address, typedDataJsonString]
+	                    const signature = await walletState.provider.request({
+	                        method: 'eth_signTypedData_v4',
+	                        params: [walletState.account, JSON.stringify(typedData)],
+	                    });
                     
                     console.log('Message signed:', signature);
                     
-                    // Step 3: Send signature and message to Backend
-                    console.log('Step 3: Sending signature to Backend...');
-                    btn.textContent = '📤 Verifying...';
-                    
-                    const mintResponse = await fetch(CONFIG.API_ENDPOINT, {
-                        method: 'GET',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-Payment': signature,
-                            'X-Account': walletState.account,
-                            'X-Payment-Message': JSON.stringify(messageData)
-                        }
-                    });
+	                    // Step 4: Send signature and EIP-712 message to Backend
+	                    console.log('Step 4: Sending EIP-712 Signature to Backend...');
+	                    btn.textContent = '📤 Processing Payment...';
+	                    
+	                    // We send the signature in X-Payment and the full EIP-712 message object in X-Payment-Message
+	                    const mintResponse = await fetch(CONFIG.API_ENDPOINT, {
+	                        method: 'GET',
+	                        headers: {
+	                            'Content-Type': 'application/json',
+	                            'X-Payment': signature,
+	                            'X-Account': walletState.account,
+	                            'X-Payment-Message': JSON.stringify(messageData) // Full EIP-712 Typed Data
+	                        }
+	                    });
                     
                     const mintData = await mintResponse.json();
                     console.log('Mint response:', mintData);
