@@ -308,7 +308,7 @@ async function handleProtocolClick() {
         responseDiv.style.display = 'block';
         responseDiv.scrollIntoView({ behavior: 'smooth' });
         
-        if (schemaResponse.status === 402 || schemaData.error === 'X-Payment-Tx header is required') {
+        if (schemaResponse.status === 402 ) {
             console.log('402 Payment Required - x402 schema received');
             
             if (schemaData.accepts && schemaData.accepts.length > 0) {
@@ -321,18 +321,8 @@ async function handleProtocolClick() {
                 btn.textContent = '✍️ Sign Message';
                 btn.style.background = 'linear-gradient(135deg, #FF6B00, #FFD700)';
                 btn.style.color = '#1a1a2e';
-                
-                // Create EIP-712 message
-                const message = {
-                    type: 'object',
-                    properties: {
-                        action: { type: 'string' },
-                        amount: { type: 'string' },
-                        recipient: { type: 'string' },
-                        timestamp: { type: 'number' }
-                    }
-                };
-                
+
+                // Create message to sign
                 const messageData = {
                     action: 'mint',
                     amount: CONFIG.USDC_AMOUNT,
@@ -340,21 +330,17 @@ async function handleProtocolClick() {
                     timestamp: Math.floor(Date.now() / 1000)
                 };
                 
-                // Sign message
                 try {
+                    // Sign the message
                     const signature = await walletState.provider.request({
                         method: 'personal_sign',
-                        params: [
-                            JSON.stringify(messageData),
-                            walletState.account
-                        ]
+                        params: [ JSON.stringify(messageData), walletState.account ]
                     });
                     
                     console.log('Message signed:', signature);
                     
-                    // Step 3: Send signature to Backend
+                    // Step 3: Send signature and message to Backend
                     console.log('Step 3: Sending signature to Backend...');
-                    
                     btn.textContent = '📤 Verifying...';
                     
                     const mintResponse = await fetch(CONFIG.API_ENDPOINT, {
@@ -362,7 +348,8 @@ async function handleProtocolClick() {
                         headers: {
                             'Content-Type': 'application/json',
                             'X-Payment': signature,
-                            'X-Account': walletState.account
+                            'X-Account': walletState.account,
+                            'X-Payment-Message': JSON.stringify(messageData)
                         }
                     });
                     
@@ -382,31 +369,30 @@ async function handleProtocolClick() {
                         // Reload stats
                         setTimeout(loadStats, 2000);
                     } else {
-                        throw new Error(mintData.error || 'Minting failed');
+                        throw new Error(mintData.message || mintData.error || 'Minting failed');
                     }
                     
                 } catch (signError) {
                     console.error('Signature error:', signError);
-                    
                     if (signError.code === 4001) {
                         showNotification('❌ Message signing rejected by user', 'error');
                     } else {
-                        showNotification('❌ Signature error: ' + signError.message, 'error');
+                        showNotification('❌ Signature error: ' + (signError.message || 'Unknown error'), 'error');
                     }
-                    
                     btn.textContent = '✨ x402 Protocol integrated';
                     btn.disabled = false;
                 }
             }
         } else if (schemaData.success || schemaResponse.status === 200) {
-            console.log('Minting successful!');
+            // This case might be for when no payment is required
+            console.log('Minting successful (no payment needed)!');
             btn.textContent = '✅ Minted Successfully!';
             btn.style.background = '#00cc00';
             btn.style.color = '#000';
             showNotification('🎉 POG tokens minted successfully!', 'success');
-            
-            // Reload stats
             setTimeout(loadStats, 2000);
+        } else {
+             throw new Error(schemaData.message || schemaData.error || 'Initial API call failed');
         }
     } catch (error) {
         console.error('API call failed:', error);
