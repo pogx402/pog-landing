@@ -1,284 +1,86 @@
-// Configuration
 const CONFIG = {
-    TOKEN_NAME: '$POG',
-    CONTRACT_ADDRESS: '0xd0260db02fb21faa5494dbfde0ebe12e78d9d844',
-    EXCHANGE_RATE: '1 USDC = 10,000 $POG',
-    
-    // API Configuration
     API_ENDPOINT: 'https://pog-token-api.vercel.app/mint',
-    STATS_ENDPOINT: 'https://pog-token-api.vercel.app/stats',
+    USDC_ADDRESS: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // USDC on Base Mainnet
     PAYMENT_ADDRESS: '0x7AE34aD98ABB28797e044f7Fad37364031F19152',
-    USDC_ADDRESS: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-    USDC_AMOUNT: '1000000', // 1 USDC in wei (6 decimals)
-    MINT_AMOUNT: '10000' // 10,000 POG tokens
+    USDC_AMOUNT: '1000000', // 1 USDC (6 decimals)
 };
 
-// Store wallet state
-let walletState = {
-    isConnected: false,
+const walletState = {
+    provider: null,
     account: null,
     chainId: null,
-    provider: null
 };
 
-// Store stats
-let stats = {
-    totalMints: 0,
-    remainingSupply: '0',
-    pricePerMint: '1 USDC',
-    tokensPerMint: '10,000 POG'
-};
-
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', function() {
-    setupEventListeners();
-    loadStats();
-    checkWalletConnection();
-    // Load stats every 30 seconds
-    setInterval(loadStats, 30000);
-});
-
-function setupEventListeners() {
-    // Connect Wallet Button
-    document.getElementById('connectWalletBtn').addEventListener('click', openWalletModal);
-    
-    // Mint Button
-    document.getElementById('mintBtn').addEventListener('click', handleMintClick);
-    
-    // Protocol Button
-    document.getElementById('protocolBtn').addEventListener('click', handleProtocolClick);
+function showNotification(message, type = 'info') {
+    const notification = document.getElementById('notification');
+    notification.textContent = message;
+    notification.className = `notification ${type}`;
+    notification.style.display = 'block';
+    setTimeout(() => {
+        notification.style.display = 'none';
+    }, 5000);
 }
 
-// Open Wallet Modal
-function openWalletModal() {
-    console.log('Opening wallet modal');
-    document.getElementById('walletModal').style.display = 'flex';
-}
-
-// Close Wallet Modal
-function closeWalletModal() {
-    console.log('Closing wallet modal');
-    document.getElementById('walletModal').style.display = 'none';
-}
-
-// Connect Wallet
-async function connectWallet(walletType) {
-    console.log('Connecting wallet:', walletType);
+function updateWalletUI() {
+    const walletStatus = document.getElementById('walletStatus');
+    const protocolBtn = document.getElementById('protocolBtn');
     
-    try {
-        let provider = null;
-        
-        if (walletType === 'metamask') {
-            if (typeof window.ethereum !== 'undefined') {
-                provider = window.ethereum;
-                const accounts = await provider.request({ method: 'eth_requestAccounts' });
-                
-                if (accounts && accounts.length > 0) {
-                    handleWalletConnected(accounts[0], provider, 'MetaMask');
-                }
-            } else {
-                showNotification('❌ MetaMask not installed. Install it from https://metamask.io', 'error');
-            }
-        } else if (walletType === 'okx') {
-            if (typeof window.okxwallet !== 'undefined') {
-                provider = window.okxwallet;
-                const accounts = await provider.request({ method: 'eth_requestAccounts' });
-                
-                if (accounts && accounts.length > 0) {
-                    handleWalletConnected(accounts[0], provider, 'OKX Wallet');
-                }
-            } else if (typeof window.ethereum !== 'undefined' && window.ethereum.isOkxWallet) {
-                provider = window.ethereum;
-                const accounts = await provider.request({ method: 'eth_requestAccounts' });
-                
-                if (accounts && accounts.length > 0) {
-                    handleWalletConnected(accounts[0], provider, 'OKX Wallet');
-                }
-            } else {
-                showNotification('❌ OKX Wallet not installed. Install it from https://www.okx.com/web3', 'error');
-            }
-        } else if (walletType === 'walletconnect') {
-            showNotification('📱 WalletConnect - Scan QR code with your mobile wallet', 'info');
-        } else if (walletType === 'coinbase') {
-            if (typeof window.ethereum !== 'undefined' && window.ethereum.isCoinbaseWallet) {
-                provider = window.ethereum;
-                const accounts = await provider.request({ method: 'eth_requestAccounts' });
-                
-                if (accounts && accounts.length > 0) {
-                    handleWalletConnected(accounts[0], provider, 'Coinbase Wallet');
-                }
-            } else {
-                showNotification('❌ Coinbase Wallet not installed', 'error');
-            }
-        }
-        
-        closeWalletModal();
-    } catch (error) {
-        console.error('Wallet connection error:', error);
-        showNotification('❌ Failed to connect wallet: ' + error.message, 'error');
-    }
-}
-
-// Handle Wallet Connected
-function handleWalletConnected(account, provider, walletName) {
-    console.log('Wallet connected:', account, 'Provider:', walletName);
-    
-    walletState.isConnected = true;
-    walletState.account = account;
-    walletState.provider = provider;
-    
-    // Update button
-    const btn = document.getElementById('connectWalletBtn');
-    btn.textContent = `${account.substring(0, 6)}...${account.substring(38)}`;
-    btn.style.background = '#00cc00';
-    btn.style.color = '#000';
-    btn.style.borderColor = '#00cc00';
-    
-    showNotification(`✅ Connected with ${walletName}!`, 'success');
-    
-    // Listen for account changes
-    if (provider.on) {
-        provider.on('accountsChanged', handleAccountsChanged);
-        provider.on('chainChanged', handleChainChanged);
-    }
-}
-
-// Handle Account Changes
-function handleAccountsChanged(accounts) {
-    console.log('Accounts changed:', accounts);
-    
-    if (accounts.length === 0) {
-        walletState.isConnected = false;
-        walletState.account = null;
-        
-        const btn = document.getElementById('connectWalletBtn');
-        btn.textContent = 'Connect Wallet';
-        btn.style.background = 'transparent';
-        btn.style.color = '#000';
-        btn.style.borderColor = '#000';
-        
-        showNotification('❌ Wallet disconnected', 'error');
+    if (walletState.account) {
+        walletStatus.textContent = `Connected: ${walletState.account.substring(0, 6)}...${walletState.account.substring(walletState.account.length - 4)}`;
+        walletStatus.className = 'status-connected';
+        protocolBtn.disabled = false;
+        protocolBtn.textContent = 'Mint 10,000 $POG (x402)';
     } else {
-        walletState.account = accounts[0];
-        const btn = document.getElementById('connectWalletBtn');
-        btn.textContent = `${accounts[0].substring(0, 6)}...${accounts[0].substring(38)}`;
+        walletStatus.textContent = 'Disconnected';
+        walletStatus.className = 'status-disconnected';
+        protocolBtn.disabled = true;
+        protocolBtn.textContent = 'Connect Wallet First';
     }
 }
 
-// Handle Chain Changes
-function handleChainChanged(chainId) {
-    console.log('Chain changed:', chainId);
-    walletState.chainId = chainId;
-    
-    // Check if on Base Mainnet (chainId: 8453)
-    if (parseInt(chainId) !== 8453) {
-        showNotification('⚠️ Please switch to Base Mainnet', 'error');
-    }
-}
-
-// Check if wallet is already connected
-async function checkWalletConnection() {
-    try {
-        if (typeof window.ethereum !== 'undefined') {
-            const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-            if (accounts && accounts.length > 0) {
-                handleWalletConnected(accounts[0], window.ethereum, 'MetaMask');
-            }
-        } else if (typeof window.okxwallet !== 'undefined') {
-            const accounts = await window.okxwallet.request({ method: 'eth_accounts' });
-            if (accounts && accounts.length > 0) {
-                handleWalletConnected(accounts[0], window.okxwallet, 'OKX Wallet');
-            }
-        }
-    } catch (error) {
-        console.error('Error checking wallet connection:', error);
-    }
-}
-
-// Load stats from Backend API
-async function loadStats() {
-    try {
-        console.log('Loading stats from:', CONFIG.STATS_ENDPOINT);
-        const response = await fetch(CONFIG.STATS_ENDPOINT);
-        const data = await response.json();
-        
-        console.log('Stats received:', data);
-        
-        if (data) {
-            stats.totalMints = data.totalMints || 0;
-            stats.remainingSupply = data.remainingSupply || '0 POG';
-            stats.pricePerMint = data.pricePerMint || '1 USDC';
-            stats.tokensPerMint = data.tokensPerMint || '10,000 POG';
+async function connectWallet() {
+    if (window.ethereum) {
+        try {
+            const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+            walletState.provider = window.ethereum;
+            walletState.account = accounts[0];
+            walletState.chainId = await window.ethereum.request({ method: 'eth_chainId' });
             
-            // Update UI
-            updateProgressBar();
-            updateStats();
+            // Check for Base Mainnet (Chain ID 8453)
+            if (walletState.chainId !== '0x2105') { // 0x2105 is 8453 in hex
+                 showNotification('❌ Please switch to Base Mainnet (Chain ID 8453)', 'error');
+            }
+            
+            updateWalletUI();
+            loadStats();
+            
+            // Listen for changes
+            window.ethereum.on('accountsChanged', (newAccounts) => {
+                walletState.account = newAccounts[0] || null;
+                updateWalletUI();
+                loadStats();
+            });
+            window.ethereum.on('chainChanged', (newChainId) => {
+                walletState.chainId = newChainId;
+                updateWalletUI();
+                loadStats();
+            });
+
+        } catch (error) {
+            console.error('User rejected connection:', error);
+            showNotification('❌ Wallet connection rejected', 'error');
         }
-    } catch (error) {
-        console.error('Failed to load stats:', error);
+    } else {
+        showNotification('❌ MetaMask or compatible wallet not detected', 'error');
     }
 }
 
-// Update progress bar
-function updateProgressBar() {
-    // Parse remaining supply (e.g., "999960000.0 POG" -> 999960000)
-    const remainingStr = stats.remainingSupply.replace(/[^0-9.]/g, '');
-    const remaining = parseInt(remainingStr) || 0;
-    const total = 1000000000; // 1B
-    const minted = total - remaining;
-    const percentage = (minted / total) * 100;
-    
-    const progressFill = document.querySelector('.progress-fill');
-    const progressLabel = document.querySelector('.progress-label');
-    
-    if (progressFill) {
-        progressFill.style.width = percentage + '%';
-    }
-    
-    if (progressLabel) {
-        const mintedM = (minted / 1000000).toFixed(1);
-        const totalM = (total / 1000000).toFixed(0);
-        progressLabel.textContent = `${mintedM}M / ${totalM}M`;
-    }
-    
-    console.log(`Progress: ${percentage.toFixed(2)}% (${minted} / ${total})`);
+async function loadStats() {
+    // This is a placeholder for loading token stats or other data
+    // In a real app, you would fetch this from a contract or API
+    console.log('Loading stats...');
 }
 
-// Update stats display
-function updateStats() {
-    // Update MINTS count
-    const mintsElement = document.querySelector('[data-stat="mints"]');
-    if (mintsElement) {
-        mintsElement.textContent = stats.totalMints;
-    }
-    
-    // Update SUPPLY LEFT
-    const supplyElement = document.querySelector('[data-stat="supply"]');
-    if (supplyElement) {
-        supplyElement.textContent = stats.remainingSupply;
-    }
-}
-
-// Handle Mint Button Click
-async function handleMintClick() {
-    console.log('Mint button clicked');
-    
-    if (!walletState.isConnected) {
-        showNotification('❌ Please connect your wallet first', 'error');
-        openWalletModal();
-        return;
-    }
-    
-    // Check if on Base Mainnet
-    if (walletState.chainId && parseInt(walletState.chainId) !== 8453) {
-        showNotification('⚠️ Please switch to Base Mainnet', 'error');
-        return;
-    }
-    
-    await handleProtocolClick();
-}
-
-// Handle Protocol Button Click - x402 Flow with Signature
 async function handleProtocolClick() {
     console.log('Protocol button clicked - Starting x402 flow');
     
@@ -292,7 +94,6 @@ async function handleProtocolClick() {
     
     try {
         // Step 1: Get x402 schema from API
-        console.log('Step 1: Fetching x402 payment schema...');
         const schemaResponse = await fetch(CONFIG.API_ENDPOINT, {
             method: 'GET',
             headers: {
@@ -303,159 +104,157 @@ async function handleProtocolClick() {
         const schemaData = await schemaResponse.json();
         console.log('Schema received:', schemaData);
         
-	        // Display schema (even if it's 402, we show the schema)
-	        responseContent.textContent = JSON.stringify(schemaData, null, 2);
-	        responseDiv.style.display = 'block';
-	        responseDiv.scrollIntoView({ behavior: 'smooth' });
-	        
-	        if (schemaResponse.status === 402 ) {
-	            console.log('402 Payment Required - x402 schema received. Proceeding to Step 2: Signing.');
-	            
-	            if (schemaData.accepts && schemaData.accepts.length > 0) {
+        // Display schema (even if it's 402, we show the schema)
+        responseContent.textContent = JSON.stringify(schemaData, null, 2);
+        responseDiv.style.display = 'block';
+        responseDiv.scrollIntoView({ behavior: 'smooth' });
+        
+        // --- Core x402 Logic ---
+        
+        if (schemaResponse.status === 402 ) {
+            console.log('402 Payment Required - x402 schema received. Proceeding to Step 2: Signing.');
+            
+            if (schemaData.accepts && schemaData.accepts.length > 0) {
                 const paymentOption = schemaData.accepts[0];
                 console.log('Payment option:', paymentOption);
                 
-                // Step 2: Sign message with wallet
-                console.log('Step 2: Signing message with wallet...');
-                
-                btn.textContent = '✍️ Sign Message';
-                btn.style.background = 'linear-gradient(135deg, #FF6B00, #FFD700)';
-                btn.style.color = '#1a1a2e';
+                // Step 2: Prepare EIP-712 Typed Data for TransferWithAuthorization
+                console.log('Step 2: Preparing EIP-712 Typed Data...');
+                btn.textContent = '✍️ Preparing Tx...';
 
-	                // Step 2: Prepare EIP-712 Typed Data for TransferWithAuthorization
-	                console.log('Step 2: Preparing EIP-712 Typed Data...');
-	                btn.textContent = '✍️ Preparing Tx...';
-	
-	                // Nonce is required for TransferWithAuthorization. We'll use a random one for simplicity, 
-	                // but in a real app, this should be fetched from the USDC contract or managed carefully.
-	                // This creates a 32-byte hex string (64 characters)
-	                const nonce = '0x' + Array.from({length: 32}, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0')).join('');
-	                const validAfter = 0; // Valid immediately
-	                const validBefore = Math.floor(Date.now() / 1000) + (60 * 5); // Valid for 5 minutes
-	
-	                const domain = {
-	                    name: 'USD Coin',
-	                    version: '2',
-	                    chainId: 8453, // Base Mainnet
-	                    verifyingContract: CONFIG.USDC_ADDRESS, // 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
-	                };
-	
-	                const types = {
-	                    TransferWithAuthorization: [
-	                        { name: 'from', type: 'address' },
-	                        { name: 'to', type: 'address' },
-	                        { name: 'value', type: 'uint256' },
-	                        { name: 'validAfter', type: 'uint256' },
-	                        { name: 'validBefore', type: 'uint256' },
-	                        { name: 'nonce', type: 'bytes32' },
-	                    ],
-	                };
-	
-	                const value = {
-	                    from: walletState.account,
-	                    to: CONFIG.PAYMENT_ADDRESS, // 0x7AE34aD98ABB28797e044f7Fad37364031F19152
-	                    value: CONFIG.USDC_AMOUNT, // 1000000 (1 USDC)
-	                    validAfter: validAfter,
-	                    validBefore: validBefore,
-	                    nonce: nonce,
-	                };
-	
-	                const typedData = {
-	                    domain: domain,
-	                    types: types,
-	                    primaryType: 'TransferWithAuthorization',
-	                    message: value,
-	                };
-	
-	                // We need to send the full typedData structure to the backend for verification
-	                const messageData = typedData; // Overwrite messageData with the EIP-712 structure
-	                
-	                try {
-	                    // Step 3: Sign the EIP-712 Typed Data
-	                    console.log('Step 3: Signing EIP-712 Typed Data...');
-	                    btn.textContent = '✍️ Signing EIP-712...';
-	                    
-	                    // Restore button state before signing, in case user rejects
-	                    btn.disabled = false;
-	                    btn.textContent = 'Sign EIP-712';
-	                    btn.style.background = 'linear-gradient(135deg, #FF6B00, #FFD700)';
-	                    btn.style.color = '#1a1a2e';
-	
-	                    // eth_signTypedData_v4 expects [address, typedDataJsonString]
-	                    // We will send the object directly, as many wallets handle the JSON serialization internally
-	                    // and this often resolves the "Recovered address does not match" issue.
-	                    const signature = await walletState.provider.request({
-	                        method: 'eth_signTypedData_v4',
-	                        params: [walletState.account, typedData], // Sending object instead of JSON string
-	                    });
+                // Nonce is required for TransferWithAuthorization. 
+                // For simplicity, we use a random nonce. In a real app, this should be fetched from the contract.
+                const nonce = '0x' + Array.from({length: 32}, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0')).join('');
+                const validAfter = 0; // Valid immediately
+                const validBefore = Math.floor(Date.now() / 1000) + (60 * 5); // Valid for 5 minutes
+
+                const domain = {
+                    name: 'USD Coin',
+                    version: '2',
+                    chainId: 8453, // Base Mainnet
+                    verifyingContract: CONFIG.USDC_ADDRESS,
+                };
+
+                const types = {
+                    TransferWithAuthorization: [
+                        { name: 'from', type: 'address' },
+                        { name: 'to', type: 'address' },
+                        { name: 'value', type: 'uint256' },
+                        { name: 'validAfter', type: 'uint256' },
+                        { name: 'validBefore', type: 'uint256' },
+                        { name: 'nonce', type: 'bytes32' },
+                    ],
+                };
+
+                const value = {
+                    from: walletState.account,
+                    to: CONFIG.PAYMENT_ADDRESS,
+                    value: CONFIG.USDC_AMOUNT,
+                    validAfter: validAfter,
+                    validBefore: validBefore,
+                    nonce: nonce,
+                };
+
+                const typedData = {
+                    domain: domain,
+                    types: types,
+                    primaryType: 'TransferWithAuthorization',
+                    message: value,
+                };
+
+                // messageData is the full EIP-712 structure sent to the backend
+                const messageData = typedData; 
+                
+                try {
+                    // Step 3: Sign the EIP-712 Typed Data
+                    console.log('Step 3: Signing EIP-712 Typed Data...');
+                    btn.textContent = '✍️ Signing EIP-712...';
                     
+                    // Reset button state before signing, in case user rejects
+                    btn.disabled = false;
+                    btn.textContent = 'Sign EIP-712';
+                    btn.style.background = 'linear-gradient(135deg, #FF6B00, #FFD700)';
+                    btn.style.color = '#1a1a2e';
+
+                    // Use eth_signTypedData_v4, sending the object directly
+                    const signature = await walletState.provider.request({
+                        method: 'eth_signTypedData_v4',
+                        params: [walletState.account, typedData], 
+                    });
+                
                     console.log('Message signed:', signature);
                     
-	                    // Step 4: Send signature and EIP-712 message to Backend
-	                    console.log('Step 4: Sending EIP-712 Signature to Backend...');
-	                    btn.textContent = '📤 Processing Payment...';
-	                    btn.disabled = true; // Re-disable while processing
-	                    
-	                    // We send the signature in X-Payment and the full EIP-712 message object in X-Payment-Message
-	                    const mintResponse = await fetch(CONFIG.API_ENDPOINT, {
-	                        method: 'GET',
-	                        headers: {
-	                            'Content-Type': 'application/json',
-	                            'X-Payment': signature,
-	                            'X-Account': walletState.account,
-	                            'X-Payment-Message': JSON.stringify(messageData) // Full EIP-712 Typed Data
-	                        }
-	                    });
+                    // Step 4: Send signature and EIP-712 message to Backend
+                    console.log('Step 4: Sending EIP-712 Signature to Backend...');
+                    btn.textContent = '📤 Processing Payment...';
+                    btn.disabled = true; // Re-disable while processing
                     
+                    // We send the signature in X-Payment and the full EIP-712 message object in X-Payment-Message
+                    const mintResponse = await fetch(CONFIG.API_ENDPOINT, {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Payment': signature,
+                            'X-Account': walletState.account,
+                            'X-Payment-Message': JSON.stringify(messageData) // Full EIP-712 Typed Data
+                        }
+                    });
+                
                     const mintData = await mintResponse.json();
                     console.log('Mint response:', mintData);
                     
                     // Update response display
                     responseContent.textContent = JSON.stringify(mintData, null, 2);
                     
-	                    if (mintResponse.status === 200 && mintData.success) {
-	                        console.log('✅ Minting successful!');
-	                        btn.textContent = '✅ Minted Successfully!';
-	                        btn.style.background = '#00cc00';
-	                        btn.style.color = '#000';
-	                        showNotification('🎉 POG tokens minted successfully!', 'success');
-	                        
-	                        // Reload stats
-	                        setTimeout(loadStats, 2000);
-	                    } else {
-	                        // If minting failed, but it wasn't a signature error, display the error from the backend
-	                        throw new Error(mintData.message || mintData.error || 'Minting failed');
-	                    }
-                    
-	                } catch (signError) {
-	                    console.error('Signature/Processing error:', signError);
-	                    if (signError.code === 4001) {
-	                        showNotification('❌ Message signing rejected by user', 'error');
-	                    } else {
-	                        showNotification('❌ Error: ' + (signError.message || 'Unknown error'), 'error');
-	                    }
-	                    // Reset button to initial state
-	                    btn.textContent = '✨ x402 Protocol integrated';
-	                    btn.disabled = false;
-	                    btn.style.background = 'linear-gradient(135deg, #FF6B00, #FFD700)';
-	                    btn.style.color = '#1a1a2e';
-	                }
+                    if (mintResponse.status === 200 && mintData.success) {
+                        console.log('✅ Minting successful!');
+                        btn.textContent = '✅ Minted Successfully!';
+                        btn.style.background = '#00cc00';
+                        btn.style.color = '#000';
+                        showNotification('🎉 POG tokens minted successfully!', 'success');
+                        
+                        // Reload stats
+                        setTimeout(loadStats, 2000);
+                    } else {
+                        // If minting failed, but it wasn't a signature error, display the error from the backend
+                        showNotification('❌ Minting failed: ' + (mintData.message || mintData.error || 'Unknown error'), 'error');
+                    }
+                
+                } catch (signError) {
+                    console.error('Signature/Processing error:', signError);
+                    if (signError.code === 4001) {
+                        showNotification('❌ Message signing rejected by user', 'error');
+                    } else {
+                        showNotification('❌ Error: ' + (signError.message || 'Unknown error'), 'error');
+                    }
+                    // Reset button to initial state
+                    btn.textContent = 'Mint 10,000 $POG (x402)';
+                    btn.disabled = false;
+                    btn.style.background = 'linear-gradient(135deg, #FF6B00, #FFD700)';
+                    btn.style.color = '#1a1a2e';
+                }
+            } else {
+                showNotification('❌ Payment schema not found in 402 response', 'error');
+                btn.textContent = '⚠️ Error';
+                btn.style.background = '#FF4444';
+                btn.style.color = '#fff';
             }
-	        } else if (schemaData.success || schemaResponse.status === 200) {
-	            // This case might be for when no payment is required
-	            console.log('Minting successful (no payment needed)!');
-	            btn.textContent = '✅ Minted Successfully!';
-	            btn.style.background = '#00cc00';
-	            btn.style.color = '#000';
-	            showNotification('🎉 POG tokens minted successfully!', 'success');
-	            setTimeout(loadStats, 2000);
-	        } else {
-	             // If it's not 402 and not 200, it's a true error
-	             // We return here to prevent the outer catch block from running unnecessarily
-	             showNotification('❌ Initial API call failed: ' + (schemaData.message || schemaData.error), 'error');
-	             return;
-	        }
-	    } catch (error) {
+        } else if (schemaResponse.status === 200 && schemaData.success) {
+            // This case might be for when no payment is required
+            console.log('Minting successful (no payment needed)!');
+            btn.textContent = '✅ Minted Successfully!';
+            btn.style.background = '#00cc00';
+            btn.style.color = '#000';
+            showNotification('🎉 POG tokens minted successfully!', 'success');
+            setTimeout(loadStats, 2000);
+        } else {
+             // If it's not 402 and not 200, it's a true error
+             showNotification('❌ Initial API call failed: ' + (schemaData.message || schemaData.error || 'Unknown API Error'), 'error');
+             btn.textContent = '⚠️ Error';
+             btn.style.background = '#FF4444';
+             btn.style.color = '#fff';
+        }
+    } catch (error) {
         console.error('API call failed:', error);
         
         // Display error response
@@ -477,73 +276,11 @@ async function handleProtocolClick() {
     }
 }
 
-// Copy contract address to clipboard
-function copyAddress() {
-    const address = CONFIG.CONTRACT_ADDRESS;
-    navigator.clipboard.writeText(address).then(() => {
-        showNotification('✅ Address copied to clipboard!', 'success');
-    }).catch(err => {
-        console.error('Failed to copy:', err);
-        showNotification('❌ Failed to copy address', 'error');
-    });
-}
-
-// Show notification
-function showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 16px 24px;
-        background: ${type === 'success' ? '#00cc00' : type === 'error' ? '#FF4444' : '#FF6B00'};
-        color: ${type === 'success' ? '#000' : '#fff'};
-        border-radius: 8px;
-        font-weight: 600;
-        z-index: 9999;
-        animation: slideIn 0.3s ease-out;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    `;
-    notification.textContent = message;
-    document.body.appendChild(notification);
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('connectWalletBtn').addEventListener('click', connectWallet);
+    document.getElementById('protocolBtn').addEventListener('click', handleProtocolClick);
     
-    setTimeout(() => {
-        notification.style.animation = 'slideOut 0.3s ease-out';
-        setTimeout(() => notification.remove(), 300);
-    }, 3000);
-}
-
-// Add animation styles
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes slideIn {
-        from {
-            transform: translateX(400px);
-            opacity: 0;
-        }
-        to {
-            transform: translateX(0);
-            opacity: 1;
-        }
-    }
-    
-    @keyframes slideOut {
-        from {
-            transform: translateX(0);
-            opacity: 1;
-        }
-        to {
-            transform: translateX(400px);
-            opacity: 0;
-        }
-    }
-`;
-document.head.appendChild(style);
-
-// Close modal when clicking outside
-document.getElementById('walletModal')?.addEventListener('click', function(e) {
-    if (e.target === this) {
-        closeWalletModal();
-    }
+    // Initial check
+    updateWalletUI();
+    loadStats();
 });
-
