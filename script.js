@@ -451,7 +451,9 @@ async function handleProtocolClick() {
 	            setTimeout(loadStats, 2000);
 	        } else {
 	             // If it's not 402 and not 200, it's a true error
-	             throw new Error(schemaData.message || schemaData.error || 'Initial API call failed');
+	             // We return here to prevent the outer catch block from running unnecessarily
+	             showNotification('❌ Initial API call failed: ' + (schemaData.message || schemaData.error), 'error');
+	             return;
 	        }
 	    } catch (error) {
         console.error('API call failed:', error);
