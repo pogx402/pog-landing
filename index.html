@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>POG - The Ultimate Meme Token</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Web3Modal CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@web3modal/html@latest/dist/styles.css">
 </head>
 <body>
     <div class="container">
@@ -19,7 +17,11 @@
                 <a href="https://twitter.com" target="_blank" class="nav-link">Twitter</a>
                 <a href="https://telegram.org" target="_blank" class="nav-link">Telegram</a>
             </nav>
-            <button class="btn-connect" id="connectWalletBtn">Connect Wallet</button>
+            <div class="wallet-buttons">
+                <button class="wallet-icon" id="metaMaskBtn" title="MetaMask">🦊</button>
+                <button class="wallet-icon" id="okxBtn" title="OKX Wallet">🟡</button>
+                <button class="btn-connect" id="connectWalletBtn">Connect Wallet</button>
+            </div>
         </header>
 
         <!-- Main Content -->
@@ -84,36 +86,62 @@
         </footer>
     </div>
 
-    <!-- Web3Modal -->
-    <script src="https://cdn.jsdelivr.net/npm/@web3modal/html@latest/dist/index.umd.js"></script>
-    <script>
-        // Initialize Web3Modal
-        const projectId = 'YOUR_WALLETCONNECT_PROJECT_ID'; // Replace with your project ID
-        
-        const metadata = {
-            name: 'POG Token',
-            description: 'POG - The Ultimate Meme Token',
-            url: window.location.origin,
-            icons: ['https://avatars.githubusercontent.com/u/37784886']
-        };
+    <!-- Wallet Connect Modal -->
+    <div class="modal" id="walletModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Connect a Wallet</h2>
+                <button class="modal-close" onclick="closeWalletModal()">✕</button>
+            </div>
+            
+            <div class="modal-body">
+                <div class="wallet-list">
+                    <div class="wallet-section">
+                        <div class="section-title">Installed</div>
+                        <button class="wallet-option" onclick="connectWallet('okx')">
+                            <span class="wallet-logo">🟡</span>
+                            <div class="wallet-info">
+                                <div class="wallet-name">OKX Wallet</div>
+                                <div class="wallet-status">Recent</div>
+                            </div>
+                        </button>
+                    </div>
 
-        // Create Web3Modal instance
-        const web3modal = new Web3Modal.Web3Modal({
-            projectId,
-            metadata,
-            chains: [
-                {
-                    chainId: 8453,
-                    name: 'Base',
-                    currency: 'ETH',
-                    explorerUrl: 'https://basescan.org',
-                    rpcUrl: 'https://mainnet.base.org'
-                }
-            ],
-            enableAnalytics: true,
-            themeMode: 'light'
-        });
-    </script>
+                    <div class="wallet-section">
+                        <div class="section-title">Recommended</div>
+                        <button class="wallet-option" onclick="connectWallet('metamask')">
+                            <span class="wallet-logo">🦊</span>
+                            <div class="wallet-info">
+                                <div class="wallet-name">MetaMask</div>
+                            </div>
+                        </button>
+                        <button class="wallet-option" onclick="connectWallet('walletconnect')">
+                            <span class="wallet-logo">🔗</span>
+                            <div class="wallet-info">
+                                <div class="wallet-name">WalletConnect</div>
+                            </div>
+                        </button>
+                        <button class="wallet-option" onclick="connectWallet('coinbase')">
+                            <span class="wallet-logo">💙</span>
+                            <div class="wallet-info">
+                                <div class="wallet-name">Coinbase Wallet</div>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="wallet-info-box">
+                    <h3>What is a Wallet?</h3>
+                    <p>A Home for your Digital Assets</p>
+                    <p>Wallets are used to send, receive, store, and display digital assets like Ethereum and NFTs.</p>
+                    <p style="margin-top: 10px;"><strong>A New Way to Log In</strong></p>
+                    <p>Instead of creating new accounts and passwords on every website, just connect your wallet.</p>
+                    <button class="get-wallet-btn" onclick="window.open('https://metamask.io', '_blank')">Get a Wallet</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="script.js"></script>
 </body>
 </html>

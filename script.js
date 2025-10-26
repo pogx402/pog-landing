@@ -15,7 +15,8 @@ const CONFIG = {
 let walletState = {
     isConnected: false,
     account: null,
-    chainId: null
+    chainId: null,
+    provider: null
 };
 
 // Initialize on page load
@@ -27,7 +28,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function setupEventListeners() {
     // Connect Wallet Button
-    document.getElementById('connectWalletBtn').addEventListener('click', handleConnectWallet);
+    document.getElementById('connectWalletBtn').addEventListener('click', openWalletModal);
+    document.getElementById('metaMaskBtn').addEventListener('click', () => connectWallet('metamask'));
+    document.getElementById('okxBtn').addEventListener('click', () => connectWallet('okx'));
     
     // Mint Button
     document.getElementById('mintBtn').addEventListener('click', handleMintClick);
@@ -36,46 +39,131 @@ function setupEventListeners() {
     document.getElementById('protocolBtn').addEventListener('click', handleProtocolClick);
 }
 
-// Handle Connect Wallet with Web3Modal
-async function handleConnectWallet() {
-    console.log('Connect Wallet clicked');
+// Open Wallet Modal
+function openWalletModal() {
+    console.log('Opening wallet modal');
+    document.getElementById('walletModal').style.display = 'flex';
+}
+
+// Close Wallet Modal
+function closeWalletModal() {
+    console.log('Closing wallet modal');
+    document.getElementById('walletModal').style.display = 'none';
+}
+
+// Connect Wallet
+async function connectWallet(walletType) {
+    console.log('Connecting wallet:', walletType);
     
     try {
-        // Check if Web3Modal is available
-        if (typeof web3modal === 'undefined') {
-            showNotification('❌ Web3Modal not loaded. Please refresh the page.', 'error');
-            return;
-        }
-
-        // Open Web3Modal
-        const result = await web3modal.open();
+        let provider = null;
         
-        if (result) {
-            console.log('Wallet connected:', result);
-            
-            // Get provider and accounts
-            const provider = result.provider;
-            const accounts = await provider.request({ method: 'eth_accounts' });
-            
-            if (accounts && accounts.length > 0) {
-                const account = accounts[0];
-                walletState.isConnected = true;
-                walletState.account = account;
+        if (walletType === 'metamask') {
+            if (typeof window.ethereum !== 'undefined') {
+                provider = window.ethereum;
+                const accounts = await provider.request({ method: 'eth_requestAccounts' });
                 
-                // Update button
-                const btn = document.getElementById('connectWalletBtn');
-                btn.textContent = `${account.substring(0, 6)}...${account.substring(38)}`;
-                btn.style.background = '#00cc00';
-                btn.style.color = '#000';
-                btn.style.borderColor = '#00cc00';
+                if (accounts && accounts.length > 0) {
+                    handleWalletConnected(accounts[0], provider, 'MetaMask');
+                }
+            } else {
+                showNotification('❌ MetaMask not installed. Install it from https://metamask.io', 'error');
+            }
+        } else if (walletType === 'okx') {
+            if (typeof window.okxwallet !== 'undefined') {
+                provider = window.okxwallet;
+                const accounts = await provider.request({ method: 'eth_requestAccounts' });
                 
-                showNotification('✅ Wallet connected!', 'success');
-                console.log('Connected account:', account);
+                if (accounts && accounts.length > 0) {
+                    handleWalletConnected(accounts[0], provider, 'OKX Wallet');
+                }
+            } else if (typeof window.ethereum !== 'undefined' && window.ethereum.isOkxWallet) {
+                provider = window.ethereum;
+                const accounts = await provider.request({ method: 'eth_requestAccounts' });
+                
+                if (accounts && accounts.length > 0) {
+                    handleWalletConnected(accounts[0], provider, 'OKX Wallet');
+                }
+            } else {
+                showNotification('❌ OKX Wallet not installed. Install it from https://www.okx.com/web3', 'error');
+            }
+        } else if (walletType === 'walletconnect') {
+            showNotification('📱 WalletConnect - Scan QR code with your mobile wallet', 'info');
+            // WalletConnect would require additional setup
+        } else if (walletType === 'coinbase') {
+            if (typeof window.ethereum !== 'undefined' && window.ethereum.isCoinbaseWallet) {
+                provider = window.ethereum;
+                const accounts = await provider.request({ method: 'eth_requestAccounts' });
+                
+                if (accounts && accounts.length > 0) {
+                    handleWalletConnected(accounts[0], provider, 'Coinbase Wallet');
+                }
+            } else {
+                showNotification('❌ Coinbase Wallet not installed', 'error');
             }
         }
+        
+        closeWalletModal();
     } catch (error) {
         console.error('Wallet connection error:', error);
         showNotification('❌ Failed to connect wallet: ' + error.message, 'error');
+    }
+}
+
+// Handle Wallet Connected
+function handleWalletConnected(account, provider, walletName) {
+    console.log('Wallet connected:', account, 'Provider:', walletName);
+    
+    walletState.isConnected = true;
+    walletState.account = account;
+    walletState.provider = provider;
+    
+    // Update button
+    const btn = document.getElementById('connectWalletBtn');
+    btn.textContent = `${account.substring(0, 6)}...${account.substring(38)}`;
+    btn.style.background = '#00cc00';
+    btn.style.color = '#000';
+    btn.style.borderColor = '#00cc00';
+    
+    showNotification(`✅ Connected with ${walletName}!`, 'success');
+    
+    // Listen for account changes
+    if (provider.on) {
+        provider.on('accountsChanged', handleAccountsChanged);
+        provider.on('chainChanged', handleChainChanged);
+    }
+}
+
+// Handle Account Changes
+function handleAccountsChanged(accounts) {
+    console.log('Accounts changed:', accounts);
+    
+    if (accounts.length === 0) {
+        walletState.isConnected = false;
+        walletState.account = null;
+        
+        const btn = document.getElementById('connectWalletBtn');
+        btn.textContent = 'Connect Wallet';
+        btn.style.background = 'transparent';
+        btn.style.color = '#000';
+        btn.style.borderColor = '#000';
+        
+        showNotification('❌ Wallet disconnected', 'error');
+    } else {
+        walletState.account = accounts[0];
+        const btn = document.getElementById('connectWalletBtn');
+        btn.textContent = `${accounts[0].substring(0, 6)}...${accounts[0].substring(38)}`;
+    }
+}
+
+// Handle Chain Changes
+function handleChainChanged(chainId) {
+    console.log('Chain changed:', chainId);
+    walletState.chainId = chainId;
+    
+    // Check if on Base Mainnet (chainId: 8453)
+    if (parseInt(chainId) !== 8453) {
+        showNotification('⚠️ Please switch to Base Mainnet', 'error');
     }
 }
 
@@ -85,14 +173,12 @@ async function checkWalletConnection() {
         if (typeof window.ethereum !== 'undefined') {
             const accounts = await window.ethereum.request({ method: 'eth_accounts' });
             if (accounts && accounts.length > 0) {
-                walletState.isConnected = true;
-                walletState.account = accounts[0];
-                
-                const btn = document.getElementById('connectWalletBtn');
-                btn.textContent = `${accounts[0].substring(0, 6)}...${accounts[0].substring(38)}`;
-                btn.style.background = '#00cc00';
-                btn.style.color = '#000';
-                btn.style.borderColor = '#00cc00';
+                handleWalletConnected(accounts[0], window.ethereum, 'MetaMask');
+            }
+        } else if (typeof window.okxwallet !== 'undefined') {
+            const accounts = await window.okxwallet.request({ method: 'eth_accounts' });
+            if (accounts && accounts.length > 0) {
+                handleWalletConnected(accounts[0], window.okxwallet, 'OKX Wallet');
             }
         }
     } catch (error) {
@@ -106,6 +192,7 @@ async function handleMintClick() {
     
     if (!walletState.isConnected) {
         showNotification('❌ Please connect your wallet first', 'error');
+        openWalletModal();
         return;
     }
     
@@ -296,23 +383,13 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-// Listen for account changes
-if (typeof window.ethereum !== 'undefined') {
-    window.ethereum.on('accountsChanged', function(accounts) {
-        console.log('Account changed:', accounts[0]);
-        const btn = document.getElementById('connectWalletBtn');
-        if (accounts.length > 0) {
-            btn.textContent = `${accounts[0].substring(0, 6)}...${accounts[0].substring(38)}`;
-            walletState.isConnected = true;
-            walletState.account = accounts[0];
-        } else {
-            btn.textContent = 'Connect Wallet';
-            walletState.isConnected = false;
-            walletState.account = null;
-        }
-    });
-}
-
 // Load stats periodically
 setInterval(loadStats, 30000); // Every 30 seconds
+
+// Close modal when clicking outside
+document.getElementById('walletModal')?.addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeWalletModal();
+    }
+});
 
