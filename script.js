@@ -1,7 +1,6 @@
 // Configuration
 const CONFIG = {
     TOKEN_NAME: '$POG',
-    TOTAL_SUPPLY: '1000000000', // 1B in wei
     CONTRACT_ADDRESS: '0xd0260db02fb21faa5494dbfde0ebe12e78d9d844',
     EXCHANGE_RATE: '1 USDC = 10,000 $POG',
     
@@ -14,6 +13,20 @@ const CONFIG = {
     MINT_AMOUNT: '10000' // 10,000 POG tokens
 };
 
+// USDC ABI (minimal - only needed functions)
+const USDC_ABI = [
+    {
+        "constant": false,
+        "inputs": [
+            {"name": "_to", "type": "address"},
+            {"name": "_value", "type": "uint256"}
+        ],
+        "name": "transfer",
+        "outputs": [{"name": "", "type": "bool"}],
+        "type": "function"
+    }
+];
+
 // Store wallet state
 let walletState = {
     isConnected: false,
@@ -24,8 +37,10 @@ let walletState = {
 
 // Store stats
 let stats = {
-    minted: 0,
-    remaining: CONFIG.TOTAL_SUPPLY
+    totalMints: 0,
+    remainingSupply: '0',
+    pricePerMint: '1 USDC',
+    tokensPerMint: '10,000 POG'
 };
 
 // Initialize on page load
@@ -203,9 +218,11 @@ async function loadStats() {
         
         console.log('Stats received:', data);
         
-        if (data.stats) {
-            stats.minted = data.stats.minted || 0;
-            stats.remaining = data.stats.remaining || CONFIG.TOTAL_SUPPLY;
+        if (data) {
+            stats.totalMints = data.totalMints || 0;
+            stats.remainingSupply = data.remainingSupply || '0 POG';
+            stats.pricePerMint = data.pricePerMint || '1 USDC';
+            stats.tokensPerMint = data.tokensPerMint || '10,000 POG';
             
             // Update UI
             updateProgressBar();
@@ -213,17 +230,16 @@ async function loadStats() {
         }
     } catch (error) {
         console.error('Failed to load stats:', error);
-        // Use default values if API fails
-        stats.minted = 0;
-        stats.remaining = CONFIG.TOTAL_SUPPLY;
-        updateProgressBar();
     }
 }
 
 // Update progress bar
 function updateProgressBar() {
-    const total = parseInt(CONFIG.TOTAL_SUPPLY);
-    const minted = parseInt(stats.minted);
+    // Parse remaining supply (e.g., "999960000.0 POG" -> 999960000)
+    const remainingStr = stats.remainingSupply.replace(/[^0-9.]/g, '');
+    const remaining = parseInt(remainingStr) || 0;
+    const total = 1000000000; // 1B
+    const minted = total - remaining;
     const percentage = (minted / total) * 100;
     
     const progressFill = document.querySelector('.progress-fill');
@@ -234,7 +250,7 @@ function updateProgressBar() {
     }
     
     if (progressLabel) {
-        const mintedM = (minted / 1000000).toFixed(0);
+        const mintedM = (minted / 1000000).toFixed(1);
         const totalM = (total / 1000000).toFixed(0);
         progressLabel.textContent = `${mintedM}M / ${totalM}M`;
     }
@@ -247,18 +263,17 @@ function updateStats() {
     // Update MINTS count
     const mintsElement = document.querySelector('[data-stat="mints"]');
     if (mintsElement) {
-        mintsElement.textContent = (parseInt(stats.minted) / 10000).toFixed(0);
+        mintsElement.textContent = stats.totalMints;
     }
     
     // Update SUPPLY LEFT
     const supplyElement = document.querySelector('[data-stat="supply"]');
     if (supplyElement) {
-        const remaining = parseInt(stats.remaining);
-        supplyElement.textContent = (remaining / 1000000).toFixed(1) + 'M POG';
+        supplyElement.textContent = stats.remainingSupply;
     }
 }
 
-// Handle Mint Button Click
+// Handle Mint Button Click - Trigger USDC Transfer
 async function handleMintClick() {
     console.log('Mint button clicked');
     
@@ -268,24 +283,155 @@ async function handleMintClick() {
         return;
     }
     
-    handleProtocolClick();
+    // Check if on Base Mainnet
+    if (walletState.chainId && parseInt(walletState.chainId) !== 8453) {
+        showNotification('⚠️ Please switch to Base Mainnet', 'error');
+        return;
+    }
+    
+    await sendUSDCTransaction();
 }
 
-// Handle Protocol Button Click - x402 Flow
+// Send USDC Transaction
+async function sendUSDCTransaction() {
+    const btn = document.getElementById('mintBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Waiting for wallet...';
+    
+    try {
+        console.log('Sending USDC transaction...');
+        
+        // Prepare transaction data for USDC transfer
+        // transfer(address to, uint256 amount)
+        const transferData = encodeTransferData(CONFIG.PAYMENT_ADDRESS, CONFIG.USDC_AMOUNT);
+        
+        // Send transaction
+        const txHash = await walletState.provider.request({
+            method: 'eth_sendTransaction',
+            params: [{
+                from: walletState.account,
+                to: CONFIG.USDC_ADDRESS,
+                data: transferData,
+                value: '0'
+            }]
+        });
+        
+        console.log('Transaction sent:', txHash);
+        btn.textContent = '⏳ Confirming...';
+        showNotification(`📤 Transaction sent: ${txHash.substring(0, 10)}...`, 'info');
+        
+        // Wait for transaction confirmation
+        await waitForTransaction(txHash);
+        
+        // Call backend API with transaction hash
+        await callBackendWithTxHash(txHash);
+        
+        btn.textContent = '✅ Minted!';
+        btn.style.background = '#00cc00';
+        showNotification('🎉 POG tokens minted successfully!', 'success');
+        
+        // Reload stats
+        setTimeout(loadStats, 2000);
+        
+    } catch (error) {
+        console.error('Transaction failed:', error);
+        
+        if (error.code === 4001) {
+            showNotification('❌ Transaction rejected by user', 'error');
+        } else {
+            showNotification('❌ Transaction failed: ' + error.message, 'error');
+        }
+        
+        btn.textContent = '💵 1';
+        btn.disabled = false;
+    }
+}
+
+// Encode USDC transfer data
+function encodeTransferData(to, amount) {
+    // transfer(address to, uint256 amount)
+    // Function selector: 0xa9059cbb
+    const selector = '0xa9059cbb';
+    
+    // Pad address to 32 bytes
+    const paddedTo = to.slice(2).padStart(64, '0');
+    
+    // Pad amount to 32 bytes
+    const paddedAmount = amount.padStart(64, '0');
+    
+    return selector + paddedTo + paddedAmount;
+}
+
+// Wait for transaction confirmation
+async function waitForTransaction(txHash) {
+    return new Promise((resolve, reject) => {
+        const checkTx = async () => {
+            try {
+                const receipt = await walletState.provider.request({
+                    method: 'eth_getTransactionReceipt',
+                    params: [txHash]
+                });
+                
+                if (receipt) {
+                    if (receipt.status === '0x1') {
+                        console.log('Transaction confirmed:', txHash);
+                        resolve(receipt);
+                    } else {
+                        reject(new Error('Transaction failed'));
+                    }
+                } else {
+                    // Still pending, check again
+                    setTimeout(checkTx, 2000);
+                }
+            } catch (error) {
+                reject(error);
+            }
+        };
+        
+        checkTx();
+    });
+}
+
+// Call backend API with transaction hash
+async function callBackendWithTxHash(txHash) {
+    try {
+        console.log('Calling backend API with tx hash:', txHash);
+        
+        const response = await fetch(CONFIG.API_ENDPOINT, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Payment-Tx': txHash
+            }
+        });
+        
+        const data = await response.json();
+        console.log('Backend response:', data);
+        
+        if (response.status === 200 && data.success) {
+            console.log('✅ Minting confirmed by backend');
+            return data;
+        } else {
+            throw new Error(data.error || 'Backend verification failed');
+        }
+    } catch (error) {
+        console.error('Backend API call failed:', error);
+        throw error;
+    }
+}
+
+// Handle Protocol Button Click
 async function handleProtocolClick() {
-    console.log('Protocol button clicked - Starting x402 flow');
+    console.log('Protocol button clicked');
     
     const btn = document.getElementById('protocolBtn');
     const responseDiv = document.getElementById('apiResponse');
     const responseContent = document.getElementById('responseContent');
     
-    // Show loading state
     btn.textContent = '⏳ Loading...';
     btn.disabled = true;
     
     try {
-        // Step 1: Call /mint endpoint without payment header
-        console.log('Step 1: Fetching x402 payment schema...');
         const response = await fetch(CONFIG.API_ENDPOINT, {
             method: 'GET',
             headers: {
@@ -296,88 +442,27 @@ async function handleProtocolClick() {
         const data = await response.json();
         console.log('API Response:', data);
         
-        // Display API response
         responseContent.textContent = JSON.stringify(data, null, 2);
         responseDiv.style.display = 'block';
-        
-        // Scroll to response
         responseDiv.scrollIntoView({ behavior: 'smooth' });
         
-        // Handle different response scenarios
-        if (response.status === 402 || data.error === 'X-Payment-Tx header is required') {
-            console.log('402 Payment Required - x402 schema received');
-            
-            if (data.accepts && data.accepts.length > 0) {
-                const paymentOption = data.accepts[0];
-                console.log('Payment option:', paymentOption);
-                
-                btn.textContent = '💳 Ready to Pay';
-                btn.style.background = 'linear-gradient(135deg, #FF6B00, #FFD700)';
-                btn.style.color = '#1a1a2e';
-                
-                // Show payment instructions
-                showPaymentInstructions(paymentOption);
-            }
-        } else if (data.success || response.status === 200) {
-            console.log('Minting successful!');
-            btn.textContent = '✅ Minted Successfully!';
-            btn.style.background = '#00cc00';
-            btn.style.color = '#000';
-            showNotification('🎉 POG tokens minted successfully!', 'success');
-            
-            // Reload stats
-            setTimeout(loadStats, 2000);
-        }
+        btn.textContent = '✨ x402 Protocol integrated';
+        
     } catch (error) {
         console.error('API call failed:', error);
         
-        // Display error response
         const errorResponse = {
             error: error.message,
-            timestamp: new Date().toISOString(),
-            note: 'Make sure your API endpoint is correct and CORS is enabled'
+            timestamp: new Date().toISOString()
         };
         
         responseContent.textContent = JSON.stringify(errorResponse, null, 2);
         responseDiv.style.display = 'block';
         
-        btn.textContent = '⚠️ Error';
-        btn.style.background = '#FF4444';
-        btn.style.color = '#fff';
-        
         showNotification('❌ API Error: ' + error.message, 'error');
     } finally {
         btn.disabled = false;
     }
-}
-
-// Show payment instructions
-function showPaymentInstructions(paymentOption) {
-    const instructions = `
-🔔 PAYMENT INSTRUCTIONS:
-
-Token: ${paymentOption.extra?.name || 'POG'}
-Amount: ${(paymentOption.maxAmountRequired / 1e6).toFixed(2)} USDC
-Network: ${paymentOption.network}
-Pay to: ${paymentOption.payTo}
-
-📱 Option 1: Use x402scan.com (Recommended)
-1. Go to https://x402scan.com
-2. Search for "POG" or paste: ${CONFIG.API_ENDPOINT}
-3. Click "Fetch" and authorize payment
-4. Confirm transaction in your wallet
-
-📱 Option 2: Manual Payment (Advanced)
-1. Send ${(paymentOption.maxAmountRequired / 1e6).toFixed(2)} USDC to: ${paymentOption.payTo}
-2. Copy the transaction hash from blockchain
-3. Come back here and provide the tx hash
-
-⏱️ Timeout: ${paymentOption.maxTimeoutSeconds} seconds
-
-After payment, you'll receive ${CONFIG.MINT_AMOUNT} POG tokens! 🚀
-    `;
-    
-    alert(instructions);
 }
 
 // Copy contract address to clipboard
