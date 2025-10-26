@@ -303,15 +303,15 @@ async function handleProtocolClick() {
         const schemaData = await schemaResponse.json();
         console.log('Schema received:', schemaData);
         
-        // Display schema
-        responseContent.textContent = JSON.stringify(schemaData, null, 2);
-        responseDiv.style.display = 'block';
-        responseDiv.scrollIntoView({ behavior: 'smooth' });
-        
-        if (schemaResponse.status === 402 ) {
-            console.log('402 Payment Required - x402 schema received');
-            
-            if (schemaData.accepts && schemaData.accepts.length > 0) {
+	        // Display schema (even if it's 402, we show the schema)
+	        responseContent.textContent = JSON.stringify(schemaData, null, 2);
+	        responseDiv.style.display = 'block';
+	        responseDiv.scrollIntoView({ behavior: 'smooth' });
+	        
+	        if (schemaResponse.status === 402 ) {
+	            console.log('402 Payment Required - x402 schema received. Proceeding to Step 2: Signing.');
+	            
+	            if (schemaData.accepts && schemaData.accepts.length > 0) {
                 const paymentOption = schemaData.accepts[0];
                 console.log('Payment option:', paymentOption);
                 
@@ -371,9 +371,15 @@ async function handleProtocolClick() {
 	                const messageData = typedData; // Overwrite messageData with the EIP-712 structure
 	                
 	                try {
-	                    // Sign the EIP-712 Typed Data
+	                    // Step 3: Sign the EIP-712 Typed Data
 	                    console.log('Step 3: Signing EIP-712 Typed Data...');
 	                    btn.textContent = '✍️ Signing EIP-712...';
+	                    
+	                    // Restore button state before signing, in case user rejects
+	                    btn.disabled = false;
+	                    btn.textContent = 'Sign EIP-712';
+	                    btn.style.background = 'linear-gradient(135deg, #FF6B00, #FFD700)';
+	                    btn.style.color = '#1a1a2e';
 	
 	                    // eth_signTypedData_v4 expects [address, typedDataJsonString]
 	                    // We will send the object directly, as many wallets handle the JSON serialization internally
@@ -388,6 +394,7 @@ async function handleProtocolClick() {
 	                    // Step 4: Send signature and EIP-712 message to Backend
 	                    console.log('Step 4: Sending EIP-712 Signature to Backend...');
 	                    btn.textContent = '📤 Processing Payment...';
+	                    btn.disabled = true; // Re-disable while processing
 	                    
 	                    // We send the signature in X-Payment and the full EIP-712 message object in X-Payment-Message
 	                    const mintResponse = await fetch(CONFIG.API_ENDPOINT, {
@@ -406,42 +413,47 @@ async function handleProtocolClick() {
                     // Update response display
                     responseContent.textContent = JSON.stringify(mintData, null, 2);
                     
-                    if (mintResponse.status === 200 && mintData.success) {
-                        console.log('✅ Minting successful!');
-                        btn.textContent = '✅ Minted Successfully!';
-                        btn.style.background = '#00cc00';
-                        btn.style.color = '#000';
-                        showNotification('🎉 POG tokens minted successfully!', 'success');
-                        
-                        // Reload stats
-                        setTimeout(loadStats, 2000);
-                    } else {
-                        throw new Error(mintData.message || mintData.error || 'Minting failed');
-                    }
+	                    if (mintResponse.status === 200 && mintData.success) {
+	                        console.log('✅ Minting successful!');
+	                        btn.textContent = '✅ Minted Successfully!';
+	                        btn.style.background = '#00cc00';
+	                        btn.style.color = '#000';
+	                        showNotification('🎉 POG tokens minted successfully!', 'success');
+	                        
+	                        // Reload stats
+	                        setTimeout(loadStats, 2000);
+	                    } else {
+	                        // If minting failed, but it wasn't a signature error, display the error from the backend
+	                        throw new Error(mintData.message || mintData.error || 'Minting failed');
+	                    }
                     
-                } catch (signError) {
-                    console.error('Signature error:', signError);
-                    if (signError.code === 4001) {
-                        showNotification('❌ Message signing rejected by user', 'error');
-                    } else {
-                        showNotification('❌ Signature error: ' + (signError.message || 'Unknown error'), 'error');
-                    }
-                    btn.textContent = '✨ x402 Protocol integrated';
-                    btn.disabled = false;
-                }
+	                } catch (signError) {
+	                    console.error('Signature/Processing error:', signError);
+	                    if (signError.code === 4001) {
+	                        showNotification('❌ Message signing rejected by user', 'error');
+	                    } else {
+	                        showNotification('❌ Error: ' + (signError.message || 'Unknown error'), 'error');
+	                    }
+	                    // Reset button to initial state
+	                    btn.textContent = '✨ x402 Protocol integrated';
+	                    btn.disabled = false;
+	                    btn.style.background = 'linear-gradient(135deg, #FF6B00, #FFD700)';
+	                    btn.style.color = '#1a1a2e';
+	                }
             }
-        } else if (schemaData.success || schemaResponse.status === 200) {
-            // This case might be for when no payment is required
-            console.log('Minting successful (no payment needed)!');
-            btn.textContent = '✅ Minted Successfully!';
-            btn.style.background = '#00cc00';
-            btn.style.color = '#000';
-            showNotification('🎉 POG tokens minted successfully!', 'success');
-            setTimeout(loadStats, 2000);
-        } else {
-             throw new Error(schemaData.message || schemaData.error || 'Initial API call failed');
-        }
-    } catch (error) {
+	        } else if (schemaData.success || schemaResponse.status === 200) {
+	            // This case might be for when no payment is required
+	            console.log('Minting successful (no payment needed)!');
+	            btn.textContent = '✅ Minted Successfully!';
+	            btn.style.background = '#00cc00';
+	            btn.style.color = '#000';
+	            showNotification('🎉 POG tokens minted successfully!', 'success');
+	            setTimeout(loadStats, 2000);
+	        } else {
+	             // If it's not 402 and not 200, it's a true error
+	             throw new Error(schemaData.message || schemaData.error || 'Initial API call failed');
+	        }
+	    } catch (error) {
         console.error('API call failed:', error);
         
         // Display error response
