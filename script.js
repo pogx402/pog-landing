@@ -1,14 +1,17 @@
 // Configuration
 const CONFIG = {
     TOKEN_NAME: '$POG',
-    TOTAL_SUPPLY: '1B',
+    TOTAL_SUPPLY: '1000000000', // 1B in wei
     CONTRACT_ADDRESS: '0xd0260db02fb21faa5494dbfde0ebe12e78d9d844',
     EXCHANGE_RATE: '1 USDC = 10,000 $POG',
     
     // API Configuration
     API_ENDPOINT: 'https://pog-token-api.vercel.app/mint',
+    STATS_ENDPOINT: 'https://pog-token-api.vercel.app/stats',
     PAYMENT_ADDRESS: '0x7AE34aD98ABB28797e044f7Fad37364031F19152',
-    USDC_ADDRESS: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
+    USDC_ADDRESS: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    USDC_AMOUNT: '1000000', // 1 USDC in wei (6 decimals)
+    MINT_AMOUNT: '10000' // 10,000 POG tokens
 };
 
 // Store wallet state
@@ -19,18 +22,24 @@ let walletState = {
     provider: null
 };
 
+// Store stats
+let stats = {
+    minted: 0,
+    remaining: CONFIG.TOTAL_SUPPLY
+};
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
     setupEventListeners();
     loadStats();
     checkWalletConnection();
+    // Load stats every 30 seconds
+    setInterval(loadStats, 30000);
 });
 
 function setupEventListeners() {
     // Connect Wallet Button
     document.getElementById('connectWalletBtn').addEventListener('click', openWalletModal);
-    document.getElementById('metaMaskBtn').addEventListener('click', () => connectWallet('metamask'));
-    document.getElementById('okxBtn').addEventListener('click', () => connectWallet('okx'));
     
     // Mint Button
     document.getElementById('mintBtn').addEventListener('click', handleMintClick);
@@ -89,7 +98,6 @@ async function connectWallet(walletType) {
             }
         } else if (walletType === 'walletconnect') {
             showNotification('📱 WalletConnect - Scan QR code with your mobile wallet', 'info');
-            // WalletConnect would require additional setup
         } else if (walletType === 'coinbase') {
             if (typeof window.ethereum !== 'undefined' && window.ethereum.isCoinbaseWallet) {
                 provider = window.ethereum;
@@ -186,6 +194,70 @@ async function checkWalletConnection() {
     }
 }
 
+// Load stats from Backend API
+async function loadStats() {
+    try {
+        console.log('Loading stats from:', CONFIG.STATS_ENDPOINT);
+        const response = await fetch(CONFIG.STATS_ENDPOINT);
+        const data = await response.json();
+        
+        console.log('Stats received:', data);
+        
+        if (data.stats) {
+            stats.minted = data.stats.minted || 0;
+            stats.remaining = data.stats.remaining || CONFIG.TOTAL_SUPPLY;
+            
+            // Update UI
+            updateProgressBar();
+            updateStats();
+        }
+    } catch (error) {
+        console.error('Failed to load stats:', error);
+        // Use default values if API fails
+        stats.minted = 0;
+        stats.remaining = CONFIG.TOTAL_SUPPLY;
+        updateProgressBar();
+    }
+}
+
+// Update progress bar
+function updateProgressBar() {
+    const total = parseInt(CONFIG.TOTAL_SUPPLY);
+    const minted = parseInt(stats.minted);
+    const percentage = (minted / total) * 100;
+    
+    const progressFill = document.querySelector('.progress-fill');
+    const progressLabel = document.querySelector('.progress-label');
+    
+    if (progressFill) {
+        progressFill.style.width = percentage + '%';
+    }
+    
+    if (progressLabel) {
+        const mintedM = (minted / 1000000).toFixed(0);
+        const totalM = (total / 1000000).toFixed(0);
+        progressLabel.textContent = `${mintedM}M / ${totalM}M`;
+    }
+    
+    console.log(`Progress: ${percentage.toFixed(2)}% (${minted} / ${total})`);
+}
+
+// Update stats display
+function updateStats() {
+    // Update MINTS count
+    const mintsElement = document.querySelector('[data-stat="mints"]');
+    if (mintsElement) {
+        mintsElement.textContent = (parseInt(stats.minted) / 10000).toFixed(0);
+    }
+    
+    // Update SUPPLY LEFT
+    const supplyElement = document.querySelector('[data-stat="supply"]');
+    if (supplyElement) {
+        const remaining = parseInt(stats.remaining);
+        supplyElement.textContent = (remaining / 1000000).toFixed(1) + 'M POG';
+    }
+}
+
 // Handle Mint Button Click
 async function handleMintClick() {
     console.log('Mint button clicked');
@@ -252,7 +324,9 @@ async function handleProtocolClick() {
             btn.style.background = '#00cc00';
             btn.style.color = '#000';
             showNotification('🎉 POG tokens minted successfully!', 'success');
-            loadStats();
+            
+            // Reload stats
+            setTimeout(loadStats, 2000);
         }
     } catch (error) {
         console.error('API call failed:', error);
@@ -300,24 +374,10 @@ Pay to: ${paymentOption.payTo}
 
 ⏱️ Timeout: ${paymentOption.maxTimeoutSeconds} seconds
 
-After payment, you'll receive 10,000 POG tokens! 🚀
+After payment, you'll receive ${CONFIG.MINT_AMOUNT} POG tokens! 🚀
     `;
     
     alert(instructions);
-}
-
-// Load stats from API
-async function loadStats() {
-    try {
-        const response = await fetch(CONFIG.API_ENDPOINT.replace('/mint', '/stats'));
-        const data = await response.json();
-        
-        console.log('Stats:', data);
-        
-        // You can update stats display here if needed
-    } catch (error) {
-        console.error('Failed to load stats:', error);
-    }
 }
 
 // Copy contract address to clipboard
@@ -382,9 +442,6 @@ style.textContent = `
     }
 `;
 document.head.appendChild(style);
-
-// Load stats periodically
-setInterval(loadStats, 30000); // Every 30 seconds
 
 // Close modal when clicking outside
 document.getElementById('walletModal')?.addEventListener('click', function(e) {
