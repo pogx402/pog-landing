@@ -39,6 +39,11 @@ function updateWalletUI() {
 }
 
 async function connectWallet() {
+    // Reset state before connecting
+    const connectBtn = document.getElementById('connectWalletBtn');
+    connectBtn.disabled = true;
+    connectBtn.textContent = 'Connecting...';
+
     if (window.ethereum) {
         try {
             const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
@@ -67,12 +72,15 @@ async function connectWallet() {
             });
 
         } catch (error) {
-            console.error('User rejected connection:', error);
-            showNotification('❌ Wallet connection rejected', 'error');
+            console.error('Wallet connection error:', error);
+            showNotification('❌ Wallet connection failed: ' + (error.message || 'Unknown error'), 'error');
         }
     } else {
-        showNotification('❌ MetaMask or compatible wallet not detected', 'error');
+        showNotification('❌ MetaMask or compatible wallet not detected (window.ethereum is undefined).', 'error');
     }
+    
+    connectBtn.disabled = false;
+    connectBtn.textContent = 'Connect Wallet';
 }
 
 async function loadStats() {
