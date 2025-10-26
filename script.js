@@ -4,7 +4,6 @@ const CONFIG = {
     TOTAL_SUPPLY: '1B',
     CONTRACT_ADDRESS: '0xd0260db02fb21faa5494dbfde0ebe12e78d9d844',
     EXCHANGE_RATE: '1 USDC = 10,000 $POG',
-    TIER: 'Tier 1 Meme',
     
     // API Configuration
     API_ENDPOINT: 'https://pog-token-api.vercel.app/mint',
@@ -12,73 +11,105 @@ const CONFIG = {
     USDC_ADDRESS: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
 };
 
-// Store payment state
-let paymentState = {
-    isPending: false,
-    txHash: null,
-    paymentAddress: null,
-    connectedAccount: null
+// Store wallet state
+let walletState = {
+    isConnected: false,
+    account: null,
+    chainId: null
 };
 
-// Update page on load
+// Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
-    updatePageContent();
     setupEventListeners();
-    checkForPendingPayment();
     loadStats();
+    checkWalletConnection();
 });
-
-function updatePageContent() {
-    // Update title
-    document.querySelector('.title').textContent = CONFIG.TOKEN_NAME;
-    
-    // Update exchange rate
-    document.querySelector('.rate-label').textContent = CONFIG.EXCHANGE_RATE;
-    
-    // Update tier
-    document.querySelector('.tier-text').textContent = CONFIG.TIER;
-}
 
 function setupEventListeners() {
     // Connect Wallet Button
-    document.getElementById('connectWallet').addEventListener('click', handleConnectWallet);
+    document.getElementById('connectWalletBtn').addEventListener('click', handleConnectWallet);
+    
+    // Mint Button
+    document.getElementById('mintBtn').addEventListener('click', handleMintClick);
     
     // Protocol Button
     document.getElementById('protocolBtn').addEventListener('click', handleProtocolClick);
 }
 
-// Handle Connect Wallet
+// Handle Connect Wallet with Web3Modal
 async function handleConnectWallet() {
     console.log('Connect Wallet clicked');
     
-    // Check if MetaMask is installed
-    if (typeof window.ethereum !== 'undefined') {
-        try {
-            // Request account access
-            const accounts = await window.ethereum.request({ 
-                method: 'eth_requestAccounts' 
-            });
-            console.log('Connected account:', accounts[0]);
-            
-            // Store connected account
-            paymentState.paymentAddress = accounts[0];
-            paymentState.connectedAccount = accounts[0];
-            
-            // Update button text
-            const btn = document.getElementById('connectWallet');
-            btn.textContent = `${accounts[0].substring(0, 6)}...${accounts[0].substring(38)}`;
-            btn.style.background = '#00FF88';
-            btn.style.color = '#1a1a2e';
-            btn.style.borderColor = '#00FF88';
-            
-            showNotification('✅ Wallet connected!', 'success');
-        } catch (error) {
-            console.error('User rejected connection:', error);
-            showNotification('❌ Failed to connect wallet', 'error');
+    try {
+        // Check if Web3Modal is available
+        if (typeof web3modal === 'undefined') {
+            showNotification('❌ Web3Modal not loaded. Please refresh the page.', 'error');
+            return;
         }
-    } else {
-        showNotification('❌ MetaMask not installed. Please install it first.', 'error');
+
+        // Open Web3Modal
+        const result = await web3modal.open();
+        
+        if (result) {
+            console.log('Wallet connected:', result);
+            
+            // Get provider and accounts
+            const provider = result.provider;
+            const accounts = await provider.request({ method: 'eth_accounts' });
+            
+            if (accounts && accounts.length > 0) {
+                const account = accounts[0];
+                walletState.isConnected = true;
+                walletState.account = account;
+                
+                // Update button
+                const btn = document.getElementById('connectWalletBtn');
+                btn.textContent = `${account.substring(0, 6)}...${account.substring(38)}`;
+                btn.style.background = '#00cc00';
+                btn.style.color = '#000';
+                btn.style.borderColor = '#00cc00';
+                
+                showNotification('✅ Wallet connected!', 'success');
+                console.log('Connected account:', account);
+            }
+        }
+    } catch (error) {
+        console.error('Wallet connection error:', error);
+        showNotification('❌ Failed to connect wallet: ' + error.message, 'error');
     }
+}
+
+// Check if wallet is already connected
+async function checkWalletConnection() {
+    try {
+        if (typeof window.ethereum !== 'undefined') {
+            const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+            if (accounts && accounts.length > 0) {
+                walletState.isConnected = true;
+                walletState.account = accounts[0];
+                
+                const btn = document.getElementById('connectWalletBtn');
+                btn.textContent = `${accounts[0].substring(0, 6)}...${accounts[0].substring(38)}`;
+                btn.style.background = '#00cc00';
+                btn.style.color = '#000';
+                btn.style.borderColor = '#00cc00';
+            }
+        }
+    } catch (error) {
+        console.error('Error checking wallet connection:', error);
+    }
+}
+
+// Handle Mint Button Click
+async function handleMintClick() {
+    console.log('Mint button clicked');
+    
+    if (!walletState.isConnected) {
+        showNotification('❌ Please connect your wallet first', 'error');
+        return;
+    }
+    
+    handleProtocolClick();
 }
 
 // Handle Protocol Button Click - x402 Flow
@@ -114,8 +145,7 @@ async function handleProtocolClick() {
         responseDiv.scrollIntoView({ behavior: 'smooth' });
         
         // Handle different response scenarios
-        if (response.status === 402) {
-            // This is expected - API requires payment
+        if (response.status === 402 || data.error === 'X-Payment-Tx header is required') {
             console.log('402 Payment Required - x402 schema received');
             
             if (data.accepts && data.accepts.length > 0) {
@@ -126,32 +156,14 @@ async function handleProtocolClick() {
                 btn.style.background = 'linear-gradient(135deg, #FF6B00, #FFD700)';
                 btn.style.color = '#1a1a2e';
                 
-                // Store payment info
-                paymentState.isPending = true;
-                
                 // Show payment instructions
                 showPaymentInstructions(paymentOption);
             }
-        } else if (data.error === 'X-Payment-Tx header is required') {
-            // Same as 402 - need payment
-            console.log('Payment required - showing options');
-            
-            if (data.accepts && data.accepts.length > 0) {
-                const paymentOption = data.accepts[0];
-                btn.textContent = '💳 Ready to Pay';
-                btn.style.background = 'linear-gradient(135deg, #FF6B00, #FFD700)';
-                btn.style.color = '#1a1a2e';
-                
-                paymentState.isPending = true;
-                showPaymentInstructions(paymentOption);
-            }
         } else if (data.success || response.status === 200) {
-            // Payment already processed or minting successful
             console.log('Minting successful!');
             btn.textContent = '✅ Minted Successfully!';
-            btn.style.background = '#00FF88';
-            btn.style.color = '#1a1a2e';
-            paymentState.isPending = false;
+            btn.style.background = '#00cc00';
+            btn.style.color = '#000';
             showNotification('🎉 POG tokens minted successfully!', 'success');
             loadStats();
         }
@@ -207,74 +219,6 @@ After payment, you'll receive 10,000 POG tokens! 🚀
     alert(instructions);
 }
 
-// Check for pending payment and retry
-async function checkForPendingPayment() {
-    // This could be called after user completes payment
-    // to verify and mint tokens
-    const urlParams = new URLSearchParams(window.location.search);
-    const txHash = urlParams.get('tx');
-    
-    if (txHash) {
-        console.log('Found tx hash in URL:', txHash);
-        await retryMintWithPayment(txHash);
-    }
-}
-
-// Retry mint with payment proof
-async function retryMintWithPayment(txHash) {
-    console.log('Retrying mint with payment proof:', txHash);
-    
-    const btn = document.getElementById('protocolBtn');
-    const responseDiv = document.getElementById('apiResponse');
-    const responseContent = document.getElementById('responseContent');
-    
-    btn.textContent = '⏳ Verifying Payment...';
-    btn.disabled = true;
-    
-    try {
-        // Step 2: Call /mint with payment header
-        const response = await fetch(CONFIG.API_ENDPOINT, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Payment-Tx': txHash  // Send transaction hash
-            }
-        });
-        
-        const data = await response.json();
-        console.log('Mint response:', data);
-        
-        // Display response
-        responseContent.textContent = JSON.stringify(data, null, 2);
-        responseDiv.style.display = 'block';
-        
-        if (response.status === 200 || data.success) {
-            console.log('✅ Minting successful!');
-            btn.textContent = '✅ Tokens Minted!';
-            btn.style.background = '#00FF88';
-            btn.style.color = '#1a1a2e';
-            paymentState.isPending = false;
-            paymentState.txHash = txHash;
-            showNotification('🎉 POG tokens minted successfully!', 'success');
-            loadStats();
-        } else {
-            console.error('Minting failed:', data);
-            btn.textContent = '❌ Minting Failed';
-            btn.style.background = '#FF4444';
-            btn.style.color = '#fff';
-            showNotification('❌ Minting failed: ' + data.error, 'error');
-        }
-    } catch (error) {
-        console.error('Retry failed:', error);
-        btn.textContent = '⚠️ Verification Error';
-        btn.style.background = '#FF9800';
-        btn.style.color = '#fff';
-        showNotification('❌ Verification error: ' + error.message, 'error');
-    } finally {
-        btn.disabled = false;
-    }
-}
-
 // Load stats from API
 async function loadStats() {
     try {
@@ -283,14 +227,7 @@ async function loadStats() {
         
         console.log('Stats:', data);
         
-        // Update stats display
-        if (data.totalMints !== undefined) {
-            document.getElementById('mintCount').textContent = data.totalMints;
-        }
-        
-        if (data.remainingSupply) {
-            document.getElementById('supplyLeft').textContent = data.remainingSupply;
-        }
+        // You can update stats display here if needed
     } catch (error) {
         console.error('Failed to load stats:', error);
     }
@@ -315,8 +252,8 @@ function showNotification(message, type = 'info') {
         top: 20px;
         right: 20px;
         padding: 16px 24px;
-        background: ${type === 'success' ? '#00FF88' : type === 'error' ? '#FF4444' : '#FF6B00'};
-        color: ${type === 'success' || type === 'error' ? '#fff' : '#1a1a2e'};
+        background: ${type === 'success' ? '#00cc00' : type === 'error' ? '#FF4444' : '#FF6B00'};
+        color: ${type === 'success' ? '#000' : '#fff'};
         border-radius: 8px;
         font-weight: 600;
         z-index: 9999;
@@ -359,35 +296,19 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-// Utility: Get current connected account
-async function getConnectedAccount() {
-    if (typeof window.ethereum !== 'undefined') {
-        try {
-            const accounts = await window.ethereum.request({ 
-                method: 'eth_accounts' 
-            });
-            return accounts[0] || null;
-        } catch (error) {
-            console.error('Failed to get accounts:', error);
-            return null;
-        }
-    }
-    return null;
-}
-
 // Listen for account changes
 if (typeof window.ethereum !== 'undefined') {
     window.ethereum.on('accountsChanged', function(accounts) {
         console.log('Account changed:', accounts[0]);
-        const btn = document.getElementById('connectWallet');
+        const btn = document.getElementById('connectWalletBtn');
         if (accounts.length > 0) {
             btn.textContent = `${accounts[0].substring(0, 6)}...${accounts[0].substring(38)}`;
-            paymentState.connectedAccount = accounts[0];
-            paymentState.paymentAddress = accounts[0];
+            walletState.isConnected = true;
+            walletState.account = accounts[0];
         } else {
             btn.textContent = 'Connect Wallet';
-            paymentState.connectedAccount = null;
-            paymentState.paymentAddress = null;
+            walletState.isConnected = false;
+            walletState.account = null;
         }
     });
 }

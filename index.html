@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>POG - The Ultimate Meme Token</title>
     <link rel="stylesheet" href="style.css">
+    <!-- Web3Modal CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@web3modal/html@latest/dist/styles.css">
 </head>
 <body>
     <div class="container">
@@ -14,10 +16,10 @@
                 <span class="logo-text">POG</span>
             </div>
             <nav class="nav-links">
-                <a href="#" class="nav-link">Twitter</a>
-                <a href="#" class="nav-link">Telegram</a>
+                <a href="https://twitter.com" target="_blank" class="nav-link">Twitter</a>
+                <a href="https://telegram.org" target="_blank" class="nav-link">Telegram</a>
             </nav>
-            <button class="btn-connect" id="connectWallet">Connect Wallet</button>
+            <button class="btn-connect" id="connectWalletBtn">Connect Wallet</button>
         </header>
 
         <!-- Main Content -->
@@ -33,7 +35,7 @@
                     </div>
                     <div class="info-row">
                         <span class="info-label">CA:</span>
-                        <span class="info-value contract-addr">0xd026...d844</span>
+                        <span class="info-value contract-addr" id="contractAddr">0xd026...d844</span>
                         <button class="copy-btn" onclick="copyAddress()" title="Copy full address">📋</button>
                     </div>
                 </div>
@@ -65,32 +67,7 @@
             <!-- Right Side - Illustration -->
             <div class="right-section">
                 <div class="illustration">
-                    <!-- POG MEME Face -->
-                    <svg class="pog-face" viewBox="0 0 200 280" xmlns="http://www.w3.org/2000/svg">
-                        <!-- Head -->
-                        <ellipse cx="100" cy="80" rx="60" ry="70" fill="#f4a460" stroke="#000" stroke-width="2"/>
-                        
-                        <!-- Left Eye -->
-                        <circle cx="75" cy="60" r="12" fill="#fff" stroke="#000" stroke-width="2"/>
-                        <circle cx="75" cy="60" r="8" fill="#000"/>
-                        <circle cx="77" cy="58" r="3" fill="#fff"/>
-                        
-                        <!-- Right Eye -->
-                        <circle cx="125" cy="60" r="12" fill="#fff" stroke="#000" stroke-width="2"/>
-                        <circle cx="125" cy="60" r="8" fill="#000"/>
-                        <circle cx="127" cy="58" r="3" fill="#fff"/>
-                        
-                        <!-- Mouth (POG - O shape) -->
-                        <circle cx="100" cy="110" r="28" fill="#d2691e" stroke="#000" stroke-width="2"/>
-                        <circle cx="100" cy="110" r="20" fill="#ffb6c1"/>
-                        
-                        <!-- Eyebrows (surprised) -->
-                        <path d="M 60 45 Q 75 35 85 40" stroke="#000" stroke-width="3" fill="none" stroke-linecap="round"/>
-                        <path d="M 115 40 Q 130 35 140 45" stroke="#000" stroke-width="3" fill="none" stroke-linecap="round"/>
-                        
-                        <!-- Nose -->
-                        <ellipse cx="100" cy="85" rx="4" ry="8" fill="#d2691e"/>
-                    </svg>
+                    <img src="public/pog-meme.svg" alt="POG MEME" class="pog-meme-img">
                 </div>
             </div>
         </main>
@@ -107,6 +84,36 @@
         </footer>
     </div>
 
+    <!-- Web3Modal -->
+    <script src="https://cdn.jsdelivr.net/npm/@web3modal/html@latest/dist/index.umd.js"></script>
+    <script>
+        // Initialize Web3Modal
+        const projectId = 'YOUR_WALLETCONNECT_PROJECT_ID'; // Replace with your project ID
+        
+        const metadata = {
+            name: 'POG Token',
+            description: 'POG - The Ultimate Meme Token',
+            url: window.location.origin,
+            icons: ['https://avatars.githubusercontent.com/u/37784886']
+        };
+
+        // Create Web3Modal instance
+        const web3modal = new Web3Modal.Web3Modal({
+            projectId,
+            metadata,
+            chains: [
+                {
+                    chainId: 8453,
+                    name: 'Base',
+                    currency: 'ETH',
+                    explorerUrl: 'https://basescan.org',
+                    rpcUrl: 'https://mainnet.base.org'
+                }
+            ],
+            enableAnalytics: true,
+            themeMode: 'light'
+        });
+    </script>
     <script src="script.js"></script>
 </body>
 </html>

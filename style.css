@@ -264,10 +264,11 @@ body {
     overflow: hidden;
 }
 
-.pog-face {
-    width: 280px;
-    height: 280px;
+.pog-meme-img {
+    width: 350px;
+    height: 350px;
     animation: bounce 2s infinite;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
 }
 
 @keyframes bounce {
@@ -341,9 +342,9 @@ body {
         height: 350px;
     }
 
-    .pog-face {
-        width: 200px;
-        height: 200px;
+    .pog-meme-img {
+        width: 250px;
+        height: 250px;
     }
 
     .header {
@@ -376,5 +377,11 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
     background: #555;
+}
+
+/* Web3Modal Customization */
+w3m-modal {
+    --w3m-accent-color: #ff1493;
+    --w3m-accent-fill-color: #fff;
 }
 
