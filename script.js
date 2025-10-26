@@ -376,6 +376,7 @@ async function handleProtocolClick() {
 	                    btn.textContent = '✍️ Signing EIP-712...';
 	
 	                    // eth_signTypedData_v4 expects [address, typedDataJsonString]
+	                    // IMPORTANT: We must use JSON.stringify(typedData) to ensure the wallet signs the correct payload
 	                    const signature = await walletState.provider.request({
 	                        method: 'eth_signTypedData_v4',
 	                        params: [walletState.account, JSON.stringify(typedData)],
